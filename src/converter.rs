@@ -1,91 +1,63 @@
-use async_walkdir::WalkDir;
-
-use indicatif::{style, ProgressBar, ProgressIterator};
-use serde::{Deserialize, Serialize};
-
+use crate::model::Config;
+use std::fs;
+use std::io::Read;
 use std::path::Path;
-use std::{ffi::OsStr, path::PathBuf};
-use tokio::fs::{create_dir_all, File};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio_stream::StreamExt;
+use std::path::PathBuf;
+use zip::ZipArchive;
 
 pub struct Converter {
-    yaml_files: Vec<PathBuf>,
-    toml_results: Vec<String>,
-    toml_files: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Data {
-    name: String,
-    age: u8,
-    city: String,
+    pub config: Config,
 }
 
 impl Converter {
-    pub async fn build(path: &String) -> anyhow::Result<Self> {
-        let mut entries = WalkDir::new(&path);
-        let mut yaml_files = Vec::new();
-        let mut toml_files = Vec::new();
+    pub fn build(input_path: &String) -> anyhow::Result<Self> {
+        let zip_file = Self::find_zip_file(input_path)?;
 
-        while let Some(entry) = entries.try_next().await? {
-            if let Some("yaml" | "yml") =
-                entry.path().extension().unwrap_or(OsStr::new("")).to_str()
-            {
-                let file_name = entry.file_name().to_string_lossy().to_string();
-                yaml_files.push(entry.path());
-                toml_files.push(
-                    file_name
-                        .trim_end_matches(".yaml")
-                        .trim_end_matches(".yml")
-                        .to_string()
-                        + ".toml",
-                );
+        let config_path = Self::extract_config_file(&zip_file)?;
+        let reader = fs::File::open(config_path)?;
+        let config = serde_yaml::from_reader(reader)?;
+        Ok(Self { config })
+    }
+
+    pub fn convert(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn find_zip_file(input_path: &String) -> anyhow::Result<String> {
+        let dir = Path::new(input_path);
+        let entries = fs::read_dir(dir)?;
+
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            if let Some(extension) = path.extension() {
+                if extension == "zip" {
+                    return Ok(path.to_string_lossy().into_owned());
+                }
             }
         }
 
-        eprintln!("Found {} YAML files", yaml_files.len());
-        eprintln!("{:?}", yaml_files);
-
-        let toml_results = Vec::new();
-
-        Ok(Converter {
-            yaml_files,
-            toml_results,
-            toml_files,
-        })
+        Err(anyhow::anyhow!("No .zip file found in the directory"))
     }
 
-    pub async fn process(&mut self) -> anyhow::Result<&mut Self> {
-        let pb = ProgressBar::new(self.yaml_files.len() as u64);
-        pb.set_style(
-            style::ProgressStyle::default_bar()
-                .template(
-                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-                )
-                .map_err(|e| anyhow::anyhow!("Failed to set progress bar style: {:?}", e))?,
-        );
-        for file in self.yaml_files.iter().progress_with(pb) {
-            let file = File::open(file).await?;
-            let mut reader = BufReader::new(file);
-            let mut buffer = Vec::new();
-            reader.read_to_end(&mut buffer).await?;
-            let data: Data = serde_yaml::from_slice(&buffer)?;
-            let toml = toml::to_string(&data)?;
-            self.toml_results.push(toml);
-        }
-        Ok(self)
-    }
+    fn extract_config_file(zip_file: &str) -> anyhow::Result<PathBuf> {
+        let file = fs::File::open(zip_file)?;
+        let mut archive = ZipArchive::new(file)?;
 
-    pub async fn save(&mut self, output: &String) -> anyhow::Result<&mut Self> {
-        if !Path::new(&output).exists() {
-            create_dir_all(&output).await?;
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)?;
+            let file_name = file.name().to_owned();
+            if file_name == "testdata/config.yaml" {
+                let mut content = String::new();
+                file.read_to_string(&mut content)?;
+                let config_path = PathBuf::from("/home/serein/Projects/yarusto/src/config.yaml");
+                fs::write(&config_path, content)?;
+                return Ok(config_path);
+            }
         }
-        for (toml, file_name) in self.toml_results.iter().zip(self.toml_files.iter()) {
-            let file_path = format!("{}/{}", output, file_name);
-            let mut file = File::create(file_path).await?;
-            file.write_all(toml.as_bytes()).await?;
-        }
-        Ok(self)
+
+        Err(anyhow::anyhow!(
+            "testdata/config.yaml not found in the zip file"
+        ))
     }
 }

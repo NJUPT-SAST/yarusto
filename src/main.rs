@@ -3,9 +3,8 @@ use yarusto::main_impl;
 
 mod cli;
 
-#[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
-    if let Err(e) = main_impl().await {
+fn main() -> anyhow::Result<()> {
+    if let Err(e) = main_impl() {
         return Err(anyhow!(e));
     }
     Ok(())
