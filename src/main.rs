@@ -1,11 +1,11 @@
-use anyhow::anyhow;
+use anyhow::bail;
 use yarusto::main_impl;
 
 mod cli;
 
 fn main() -> anyhow::Result<()> {
     if let Err(e) = main_impl() {
-        return Err(anyhow!(e));
+        bail!("Error: {}", e);
     }
     Ok(())
 }

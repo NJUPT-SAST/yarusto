@@ -6,17 +6,15 @@ use zip::ZipArchive;
 
 pub struct Converter {
     pub configs: Vec<CasesConfig>,
-    pub output_path: PathBuf,
 }
 
+const TMP_DIR: &str = "./tmp";
+
 impl Converter {
-    pub fn build(
-        input_path: impl AsRef<Path>,
-        output_path: impl AsRef<Path>,
-    ) -> anyhow::Result<Self> {
+    pub fn build(input_path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let zip_file = find_zip_file(input_path)?;
 
-        let config_path = extract_config_file(&zip_file, &output_path)?;
+        let config_path = extract_config_file(&zip_file)?;
 
         let mut configs = Vec::new();
 
@@ -27,20 +25,16 @@ impl Converter {
             configs.push(config);
         }
 
-        Ok(Self {
-            configs,
-            output_path: output_path.as_ref().to_path_buf(),
-        })
+        Ok(Self { configs })
     }
 
     pub fn rename(&self) -> anyhow::Result<&Self> {
         Ok(self)
     }
 
-    pub fn tar(&self) -> anyhow::Result<()> {
-        let tar_file = self.output_path.join("config.tar");
-        let mut tar = tar::Builder::new(fs::File::create(tar_file)?)
-            .append_dir_all(&self.output_path, &self.output_path)?;
+    pub fn tar(&self, output_path: impl AsRef<Path>) -> anyhow::Result<()> {
+        let tar_file = output_path.as_ref().join("config.tar");
+        tar::Builder::new(fs::File::create(tar_file)?).append_dir_all(TMP_DIR, &output_path)?;
         Ok(())
     }
 }
@@ -61,16 +55,13 @@ fn find_zip_file(input_path: impl AsRef<Path>) -> anyhow::Result<String> {
     anyhow::bail!("No .zip file found in the directory")
 }
 
-fn extract_config_file(
-    zip_file: impl AsRef<Path>,
-    output_path: impl AsRef<Path>,
-) -> anyhow::Result<Vec<PathBuf>> {
+fn extract_config_file(zip_file: impl AsRef<Path>) -> anyhow::Result<Vec<PathBuf>> {
     let file = fs::File::open(zip_file)?;
-    ZipArchive::new(file)?.extract(&output_path)?;
+    ZipArchive::new(file)?.extract(TMP_DIR)?;
 
     let mut yaml_files = Vec::new();
 
-    let _ = WalkDir::new(&output_path)
+    let _ = WalkDir::new(TMP_DIR)
         .into_iter()
         .filter_map(Result::ok)
         .find(|entry| {

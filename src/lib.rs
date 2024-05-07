@@ -12,9 +12,7 @@ pub fn main_impl() -> anyhow::Result<()> {
     let input_path = cli.input_path;
     let output_path = cli.output_path;
 
-    Converter::build(&input_path, &output_path)?
-        .rename()?
-        .tar()?;
+    Converter::build(&input_path)?.rename()?.tar(&output_path)?;
 
     Ok(())
 }
