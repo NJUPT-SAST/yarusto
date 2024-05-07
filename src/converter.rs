@@ -1,63 +1,89 @@
-use crate::model::Config;
+use crate::model::CasesConfig;
 use std::fs;
-use std::io::Read;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 use zip::ZipArchive;
 
 pub struct Converter {
-    pub config: Config,
+    pub configs: Vec<CasesConfig>,
+    pub output_path: PathBuf,
 }
 
 impl Converter {
-    pub fn build(input_path: &String) -> anyhow::Result<Self> {
-        let zip_file = Self::find_zip_file(input_path)?;
+    pub fn build(
+        input_path: impl AsRef<Path>,
+        output_path: impl AsRef<Path>,
+    ) -> anyhow::Result<Self> {
+        let zip_file = find_zip_file(input_path)?;
 
-        let config_path = Self::extract_config_file(&zip_file)?;
-        let reader = fs::File::open(config_path)?;
-        let config = serde_yaml::from_reader(reader)?;
-        Ok(Self { config })
+        let config_path = extract_config_file(&zip_file, &output_path)?;
+
+        let mut configs = Vec::new();
+
+        for path in config_path {
+            let reader = fs::File::open(&path)?;
+            let config = serde_yaml::from_reader(reader)?;
+            eprintln!("{:?}", config);
+            configs.push(config);
+        }
+
+        Ok(Self {
+            configs,
+            output_path: output_path.as_ref().to_path_buf(),
+        })
     }
 
-    pub fn convert(&self) -> anyhow::Result<()> {
+    pub fn rename(&self) -> anyhow::Result<&Self> {
+        Ok(self)
+    }
+
+    pub fn tar(&self) -> anyhow::Result<()> {
+        let tar_file = self.output_path.join("config.tar");
+        let mut tar = tar::Builder::new(fs::File::create(tar_file)?)
+            .append_dir_all(&self.output_path, &self.output_path)?;
         Ok(())
     }
+}
 
-    fn find_zip_file(input_path: &String) -> anyhow::Result<String> {
-        let dir = Path::new(input_path);
-        let entries = fs::read_dir(dir)?;
+fn find_zip_file(input_path: impl AsRef<Path>) -> anyhow::Result<String> {
+    let entries = fs::read_dir(input_path)?;
 
-        for entry in entries {
-            let entry = entry?;
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if let Some(extension) = path.extension() {
+            if extension == "zip" {
+                return Ok(path.to_string_lossy().into_owned());
+            }
+        }
+    }
+
+    anyhow::bail!("No .zip file found in the directory")
+}
+
+fn extract_config_file(
+    zip_file: impl AsRef<Path>,
+    output_path: impl AsRef<Path>,
+) -> anyhow::Result<Vec<PathBuf>> {
+    let file = fs::File::open(zip_file)?;
+    ZipArchive::new(file)?.extract(&output_path)?;
+
+    let mut yaml_files = Vec::new();
+
+    let _ = WalkDir::new(&output_path)
+        .into_iter()
+        .filter_map(Result::ok)
+        .find(|entry| {
             let path = entry.path();
-            if let Some(extension) = path.extension() {
-                if extension == "zip" {
-                    return Ok(path.to_string_lossy().into_owned());
-                }
-            }
-        }
+            path.extension()
+                .map_or(false, |ext| ext == "yaml" || ext == "yml")
+        })
+        .map(|entry| entry.into_path())
+        .ok_or_else(|| anyhow::anyhow!("config.yaml not found in the zip file"))
+        .map(|path| yaml_files.push(path));
 
-        Err(anyhow::anyhow!("No .zip file found in the directory"))
-    }
+    eprintln!("Found {} YAML files", yaml_files.len());
+    eprintln!("{:?}", yaml_files);
 
-    fn extract_config_file(zip_file: &str) -> anyhow::Result<PathBuf> {
-        let file = fs::File::open(zip_file)?;
-        let mut archive = ZipArchive::new(file)?;
-
-        for i in 0..archive.len() {
-            let mut file = archive.by_index(i)?;
-            let file_name = file.name().to_owned();
-            if file_name == "testdata/config.yaml" {
-                let mut content = String::new();
-                file.read_to_string(&mut content)?;
-                let config_path = PathBuf::from("/home/serein/Projects/yarusto/src/config.yaml");
-                fs::write(&config_path, content)?;
-                return Ok(config_path);
-            }
-        }
-
-        Err(anyhow::anyhow!(
-            "testdata/config.yaml not found in the zip file"
-        ))
-    }
+    Ok(yaml_files)
 }
