@@ -1,40 +1,76 @@
 use crate::model::CasesConfig;
+use async_walkdir::WalkDir;
+use regex::Regex;
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
+use tokio_stream::StreamExt;
 use zip::ZipArchive;
 
 pub struct Converter {
-    pub configs: Vec<CasesConfig>,
+    pub config_paths: Vec<PathBuf>,
 }
 
 const TMP_DIR: &str = "./tmp";
 
 impl Converter {
-    pub fn build(input_path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub async fn build(input_path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let zip_file = find_zip_file(input_path)?;
 
-        let config_path = extract_config_file(&zip_file)?;
+        let config_paths = extract_config_file(&zip_file).await?;
 
-        let mut configs = Vec::new();
-
-        for path in config_path {
-            let reader = fs::File::open(&path)?;
-            let config = serde_yaml::from_reader(reader)?;
-            eprintln!("{:?}", config);
-            configs.push(config);
-        }
-
-        Ok(Self { configs })
+        Ok(Self { config_paths })
     }
 
-    pub fn rename(&self) -> anyhow::Result<&Self> {
+    pub async fn rename(&self) -> anyhow::Result<&Self> {
+        let regex = Regex::new(r"^.*(\d)\.(in|ans)$").unwrap();
+        let mut entries = WalkDir::new(TMP_DIR);
+        while let Some(entry) = entries.try_next().await? {
+            let path = entry.path();
+            let filename = path.file_name().unwrap().to_str().unwrap();
+            regex.captures(filename).and_then(|cap| {
+                let digit = cap.get(1)?.as_str();
+                let new_path =
+                    path.with_file_name(format!("{}.{}", digit, path.extension()?.to_str()?));
+                fs::rename(&path, new_path).ok()
+            });
+        }
         Ok(self)
     }
 
-    pub fn tar(&self, output_path: impl AsRef<Path>) -> anyhow::Result<()> {
-        let tar_file = output_path.as_ref().join("config.tar");
-        tar::Builder::new(fs::File::create(tar_file)?).append_dir_all(TMP_DIR, &output_path)?;
+    pub async fn convert(&self) -> anyhow::Result<&Self> {
+        for config_path in self.config_paths.clone() {
+            tokio::spawn(async move {
+                let reader = fs::File::open(&config_path).unwrap();
+                let config: CasesConfig = serde_yaml::from_reader(reader).unwrap();
+
+                let parent_dir = config_path.parent().unwrap();
+                let toml_path = parent_dir.join("config.toml");
+                fs::File::create(&toml_path).unwrap();
+
+                let toml_string = toml::to_string(&config).unwrap();
+                fs::write(&toml_path, toml_string).unwrap();
+            })
+            .await?;
+        }
+
+        Ok(self)
+    }
+
+    pub fn tar(&self, output_path: impl AsRef<Path>) -> anyhow::Result<&Self> {
+        let tar_file = output_path.as_ref().join("config.tar.zstd");
+        let file = fs::File::create(tar_file)?;
+        let encoder = zstd::stream::Encoder::new(file, 0)?;
+
+        let mut tar_builder = tar::Builder::new(encoder);
+        tar_builder.append_dir_all(&output_path, TMP_DIR)?;
+        tar_builder.finish()?;
+
+        Ok(self)
+    }
+
+    pub fn cleanup(&self) -> anyhow::Result<()> {
+        fs::remove_dir_all(TMP_DIR)?;
         Ok(())
     }
 }
@@ -55,23 +91,21 @@ fn find_zip_file(input_path: impl AsRef<Path>) -> anyhow::Result<String> {
     anyhow::bail!("No .zip file found in the directory")
 }
 
-fn extract_config_file(zip_file: impl AsRef<Path>) -> anyhow::Result<Vec<PathBuf>> {
+async fn extract_config_file(zip_file: impl AsRef<Path>) -> anyhow::Result<Vec<PathBuf>> {
     let file = fs::File::open(zip_file)?;
     ZipArchive::new(file)?.extract(TMP_DIR)?;
 
     let mut yaml_files = Vec::new();
 
-    let _ = WalkDir::new(TMP_DIR)
-        .into_iter()
-        .filter_map(Result::ok)
-        .find(|entry| {
-            let path = entry.path();
-            path.extension()
-                .map_or(false, |ext| ext == "yaml" || ext == "yml")
-        })
-        .map(|entry| entry.into_path())
-        .ok_or_else(|| anyhow::anyhow!("config.yaml not found in the zip file"))
-        .map(|path| yaml_files.push(path));
+    let mut entries = WalkDir::new(TMP_DIR);
+    while let Some(entry) = entries.try_next().await? {
+        let path = entry.path();
+        if path.file_name() == Some(OsStr::new("config.yaml"))
+            || path.file_name() == Some(OsStr::new("config.yml"))
+        {
+            yaml_files.push(path);
+        }
+    }
 
     eprintln!("Found {} YAML files", yaml_files.len());
     eprintln!("{:?}", yaml_files);
