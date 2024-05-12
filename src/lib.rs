@@ -19,7 +19,7 @@ pub async fn main_impl() -> anyhow::Result<()> {
 
     tokio::try_join!(convert_task, rename_task)?;
 
-    converter.tar(&output_path)?.cleanup()?;
+    converter.tar(&output_path).await?;
 
     Ok(())
 }
