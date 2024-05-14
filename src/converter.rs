@@ -93,7 +93,7 @@ impl Converter {
         let tar_file = output_path.as_ref().join("config.tar.zst");
         fs::create_dir_all(&output_path).await?;
         let file = File::create(&tar_file).await?;
-        let encoder = zstd::Encoder::new(file.into_std().await, 1)?;
+        let encoder = zstd::Encoder::new(file.into_std().await, 1)?.auto_finish();
         let mut tar_builder = tar::Builder::new(encoder);
         tar_builder.append_dir_all("config", &self.temp_dir)?;
         tar_builder.finish()?;
