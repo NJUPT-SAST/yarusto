@@ -6,7 +6,7 @@ mod cli;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     if let Err(e) = main_impl().await {
-        bail!("Error: {}", e);
+        bail!("{}", e);
     }
     Ok(())
 }

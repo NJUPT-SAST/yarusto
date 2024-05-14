@@ -1,5 +1,6 @@
 mod cli;
 mod converter;
+mod error;
 mod model;
 
 use clap::Parser;
@@ -14,12 +15,13 @@ pub async fn main_impl() -> anyhow::Result<()> {
 
     let converter = Converter::build(&input_path).await?;
 
-    let convert_task = converter.convert();
-    let rename_task = converter.rename();
-
-    tokio::try_join!(convert_task, rename_task)?;
-
-    converter.tar(&output_path).await?;
+    converter
+        .rename()
+        .await?
+        .convert()
+        .await?
+        .tar(&output_path)
+        .await?;
 
     Ok(())
 }
