@@ -10,7 +10,7 @@ on:
 permissions: write-all
 
 jobs:
-  release:
+  linux-release:
     name: release ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
@@ -31,11 +31,6 @@ jobs:
           ARCHIVE_TYPES: ${{ matrix.archive }}
           EXTRA_FILES: "LICENSE README.md"
           UPLOAD_MODE: release
-
-      - name: show dir
-        run: |
-          pwd
-          ls -alh
       
       - name: upload release
         if: startsWith(github.event.ref, 'refs/tags/')
@@ -43,6 +38,70 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ${{ steps.compile.outputs.BUILT_ARCHIVE }}
-          asset_name: yarusto_x86_64-${{ github.ref_name }}.tar.zst
+          asset_name: yarusto_x86_64_${{ github.ref_name }}_linux.tar.zst
+          tag: ${{ github.ref }}
+          overwrite: true
+      
+  windows-release:
+    name: release ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-gnu
+            archive: zip
+    steps:
+      - uses: actions/checkout@master
+      - name: Compile and release
+        id: compile
+        uses: rust-build/rust-build.action@v1.4.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          RUSTTARGET: ${{ matrix.target }}
+          ARCHIVE_TYPES: ${{ matrix.archive }}
+          EXTRA_FILES: "LICENSE README.md"
+          UPLOAD_MODE: release
+      
+      - name: upload release
+        if: startsWith(github.event.ref, 'refs/tags/')
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ steps.compile.outputs.BUILT_ARCHIVE }}
+          asset_name: yarusto_x86_64_${{ github.ref_name }}_win.zip
+          tag: ${{ github.ref }}
+          overwrite: true 
+
+  macos-release:
+    name: release ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            archive: zip
+    steps:
+      - uses: actions/checkout@master
+      - name: Compile and release
+        id: compile
+        uses: rust-build/rust-build.action@v1.4.5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          RUSTTARGET: ${{ matrix.target }}
+          ARCHIVE_TYPES: ${{ matrix.archive }}
+          EXTRA_FILES: "LICENSE README.md"
+          UPLOAD_MODE: release
+
+      - name: upload release
+        if: startsWith(github.event.ref, 'refs/tags/')
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ steps.compile.outputs.BUILT_ARCHIVE }}
+          asset_name: yarusto_x86_64_${{ github.ref_name }}_macos.zip
           tag: ${{ github.ref }}
           overwrite: true
