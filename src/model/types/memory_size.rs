@@ -66,18 +66,17 @@ impl<'de> Deserialize<'de> for MemorySize {
             where
                 E: de::Error,
             {
-                if let Some((value, unit)) = value.split_once(|c: char| c.is_ascii_alphabetic()) {
-                    let value = value.parse().expect("Invalid memory size");
-                    Ok(MemorySize {
-                        value,
-                        unit: MemorySizeUnit::from_str(unit).unwrap_or(MemorySizeUnit::MiB),
-                    })
-                } else {
-                    Ok(MemorySize {
-                        value: value.parse::<u32>().unwrap_or(128),
-                        unit: MemorySizeUnit::MiB,
-                    })
-                }
+                let (value, unit) = value.split_at(
+                    value
+                        .find(|c: char| c.is_ascii_alphabetic())
+                        .unwrap_or(value.len()),
+                );
+                let value = value.parse().map_err(|_| {
+                    de::Error::invalid_value(de::Unexpected::Str(value), &"a valid integer")
+                })?;
+                let unit = MemorySizeUnit::from_str(unit).unwrap_or(MemorySizeUnit::MiB);
+
+                Ok(MemorySize { value, unit })
             }
         }
 

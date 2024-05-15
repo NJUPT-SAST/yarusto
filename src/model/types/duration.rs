@@ -33,17 +33,17 @@ impl<'de> Visitor<'de> for DurationVisitor {
     where
         E: de::Error,
     {
-        if let Some((value, unit)) = value.split_once(|c: char| c.is_ascii_alphabetic()) {
-            let value = value.parse().expect("Invalid duration");
-            let unit = DurationUnit::from_str(unit).unwrap_or(DurationUnit::Milliseconds);
+        let (value, unit) = value.split_at(
+            value
+                .find(|c: char| c.is_ascii_alphabetic())
+                .unwrap_or(value.len()),
+        );
+        let value = value.parse().map_err(|_| {
+            de::Error::invalid_value(de::Unexpected::Str(value), &"a valid integer")
+        })?;
+        let unit = DurationUnit::from_str(unit).unwrap_or(DurationUnit::Milliseconds);
 
-            Ok(Duration { value, unit })
-        } else {
-            Err(de::Error::invalid_value(
-                serde::de::Unexpected::Str(value),
-                &self,
-            ))
-        }
+        Ok(Duration { value, unit })
     }
 }
 
