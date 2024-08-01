@@ -30,7 +30,7 @@ impl Converter {
         })
     }
 
-    pub async fn rename(&self) -> anyhow::Result<&Self> {
+    pub async fn rename(&self, answer_extensions: String) -> anyhow::Result<&Self> {
         let mut entries = WalkDir::new(&self.temp_dir);
         while let Some(entry) = entries.try_next().await? {
             let path = entry.path();
@@ -56,7 +56,7 @@ impl Converter {
                             .join(digit)
                             .to_str()
                             .expect("Rename error"),
-                        if ext == "out" { "ans" } else { ext }
+                        if ext == "out" { &answer_extensions } else { ext }
                     );
                     println!("Renamed {} to {}", filename, &new_filename);
                     if path.to_str().unwrap() != &new_filename {

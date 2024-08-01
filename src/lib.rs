@@ -12,11 +12,12 @@ pub async fn main_impl() -> anyhow::Result<()> {
 
     let input_path = cli.input_path;
     let output_path = cli.output_path;
+    let answer_extensions = cli.answer_extensions;
 
     let converter = Converter::build(&input_path).await?;
 
     converter
-        .rename()
+        .rename(answer_extensions)
         .await?
         .convert()
         .await?

@@ -9,4 +9,7 @@ pub struct Cli {
     /// The output file(.tar) path
     #[arg(short, long, default_value = "./out")]
     pub output_path: String,
+    /// The output answer extensions
+    #[arg(short, long, default_value = "out")]
+    pub answer_extensions: String,
 }

@@ -10,6 +10,7 @@ Usage: yarusto [OPTIONS]
 Options:
   -i, --input-path <INPUT_PATH>    The input file(.zip) path [default: .]
   -o, --output-path <OUTPUT_PATH>  The output file(.tar) path [default: ./out]
+  -a, --answer-extensions <ANSWER_EXTENSIONS> The output answer extensions(ans or out) [default: out]
   -h, --help                       Print help
   -V, --version                    Print version
 ````
