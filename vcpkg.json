@@ -1,0 +1,8 @@
+{
+    "name": "yarusto",
+    "dependencies": [
+        "boost-system",
+        "tomlplusplus",
+        "pkgconf"
+    ]
+}
