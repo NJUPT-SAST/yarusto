@@ -19,11 +19,13 @@ project(yarusto VERSION ${VERSION_SEMANTIC} LANGUAGES CXX)
 
 # find vcpkg-installed
 find_package(Boost REQUIRED COMPONENTS system)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(tomlplusplus REQUIRED IMPORTED_TARGET tomlplusplus)
 
 # source code
 add_subdirectory(src)
+# cmd arg parser
+add_subdirectory(3rdpart/argparse)
+# reflect-cpp
+add_subdirectory(3rdpart/reflect-cpp)
 
 # install
 install(TARGETS ${PROJECT_NAME}

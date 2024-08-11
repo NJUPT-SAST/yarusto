@@ -1,0 +1,6 @@
+[submodule "3rdpart/argparse"]
+	path = 3rdpart/argparse
+	url = https://github.com/p-ranav/argparse.git
+[submodule "3rdpart/reflect-cpp"]
+	path = 3rdpart/reflect-cpp
+	url = https://github.com/getml/reflect-cpp.git
